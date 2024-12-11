@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Photoshop</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #2c2c2c;
+            color: #fff;
+        }
+
+        #toolbar {
+            display: flex;
+            justify-content: start;
+            align-items: center;
+            background: #1c1c1c;
+            padding: 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        #toolbar button {
+            background: #333;
+            color: #fff;
+            border: none;
+            padding: 12px 20px;
+            margin: 0 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        #toolbar button:hover {
+            background: #555;
+            transform: translateY(-2px);
+        }
+
+        #toolbar button.active {
+            background: #4CAF50;
+        }
+
+        input[type="color"] {
+            width: 50px;
+            height: 40px;
+            margin: 0 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        input[type="range"] {
+            width: 150px;
+            margin: 0 10px;
+            cursor: pointer;
+        }
+
+        .size-display {
+            background: #333;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin-left: 5px;
+        }
+
+        #toolbar-right {
+            margin-left: auto;
+        }
+
+        #canvas-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: calc(100vh - 50px);
+            background: #2c2c2c;
+        }
+
+        canvas {
+            background: white;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+<div id="toolbar">
+    <button id="brush" class="active">🖌️ Brush</button>
+    <button id="eraser">⚪ Eraser</button>
+    <button id="rectangle">⬜ Rectangle</button>
+    <button id="circle">⭕ Circle</button>
+    <input type="color" id="color-picker" value="#000000">
+    <input type="range" id="size-picker" min="1" max="50" value="5">
+    <span class="size-display">5px</span>
+    <div id="toolbar-right">
+        <button id="undo">↩️ Undo</button>
+        <button id="clear">🗑️ Clear</button>
+        <button id="save">💾 Save</button>
+    </div>
+</div>
+
+<div id="canvas-container">
+    <canvas id="drawing-canvas" width="800" height="600"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('drawing-canvas');
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+    let brushSize = 5;
+    let brushColor = '#000';
+    let currentTool = 'brush';
+    let startX, startY;
+    const undoStack = [];
+
+    // 도구 선택 함수
+    function selectTool(tool) {
+        currentTool = tool;
+        document.querySelectorAll('#toolbar button').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(tool).classList.add('active');
+    }
+
+    // 수정된 draw 함수
+    const draw = (e) => {
+        if (!drawing) return;
+        
+        switch(currentTool) {
+            case 'brush':
+                ctx.lineWidth = brushSize;
+                ctx.lineCap = 'round';
+                ctx.strokeStyle = brushColor;
+                ctx.lineTo(e.offsetX, e.offsetY);
+                ctx.stroke();
+                break;
+            case 'eraser':
+                ctx.lineWidth = brushSize;
+                ctx.lineCap = 'round';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineTo(e.offsetX, e.offsetY);
+                ctx.stroke();
+                break;
+        }
+    };
+
+    // 도형 그리기 함수
+    const drawShape = (e) => {
+        if (!drawing) return;
+        
+        const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        ctx.putImageData(currentState, 0, 0);
+        
+        ctx.beginPath();
+        ctx.strokeStyle = brushColor;
+        ctx.lineWidth = brushSize;
+        
+        if (currentTool === 'rectangle') {
+            ctx.rect(startX, startY, e.offsetX - startX, e.offsetY - startY);
+        } else if (currentTool === 'circle') {
+            const radius = Math.sqrt(Math.pow(e.offsetX - startX, 2) + Math.pow(e.offsetY - startY, 2));
+            ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+        }
+        
+        ctx.stroke();
+    };
+
+    // 이벤트 리스너 추가
+    document.getElementById('brush').addEventListener('click', () => selectTool('brush'));
+    document.getElementById('eraser').addEventListener('click', () => selectTool('eraser'));
+    document.getElementById('rectangle').addEventListener('click', () => selectTool('rectangle'));
+    document.getElementById('circle').addEventListener('click', () => selectTool('circle'));
+    
+    document.getElementById('size-picker').addEventListener('input', (e) => {
+        brushSize = e.target.value;
+        document.querySelector('.size-display').textContent = `${brushSize}px`;
+    });
+
+    // Undo 기능
+    document.getElementById('undo').addEventListener('click', () => {
+        if (undoStack.length > 0) {
+            ctx.putImageData(undoStack.pop(), 0, 0);
+        }
+    });
+
+    // Save 기능
+    document.getElementById('save').addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = 'drawing.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    });
+
+    // 상태 저장
+    canvas.addEventListener('mousedown', (e) => {
+        undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+        startX = e.offsetX;
+        startY = e.offsetY;
+        drawing = true;
+        ctx.beginPath();
+        ctx.moveTo(e.offsetX, e.offsetY);
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (currentTool === 'brush' || currentTool === 'eraser') {
+            draw(e);
+        } else {
+            drawShape(e);
+        }
+    });
+
+    // Toolbar actions
+    document.getElementById('color-picker').addEventListener('input', (e) => {
+        brushColor = e.target.value;
+    });
+</script>
+
+</body>
+</html>
